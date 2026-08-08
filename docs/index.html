@@ -4,18 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sleepless: keep your Mac awake with the lid closed</title>
-<meta name="description" content="Sleepless keeps your MacBook awake with the lid (the laptop flap) closed, on battery, with no external display. A native menu-bar app using pmset disablesleep, with an auto-off timer and a battery-floor cutoff. Open source, MIT.">
+<meta name="description" content="Sleepless keeps your MacBook awake with the lid closed—even on battery and without an external display. A native menu-bar app using pmset disablesleep, with an auto-off timer and a battery-floor cutoff. Open source, MIT.">
 <link rel="canonical" href="https://aboudjem.github.io/Sleepless/">
 <meta name="theme-color" content="#0A0A14">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="Sleepless: keep your Mac awake with the lid closed">
-<meta property="og:description" content="Native macOS menu-bar app that keeps your MacBook awake lid-closed, on battery, no external display. pmset disablesleep, done safely. Open source, MIT.">
+<meta property="og:description" content="Native macOS menu-bar app that keeps your MacBook awake lid-closed—even on battery and without an external display. pmset disablesleep, done safely. Open source, MIT.">
 <meta property="og:url" content="https://aboudjem.github.io/Sleepless/">
 <meta property="og:image" content="https://aboudjem.github.io/Sleepless/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Sleepless: keep your Mac awake with the lid closed">
-<meta name="twitter:description" content="Native macOS menu-bar app. Lid closed, on battery, no external display. pmset disablesleep, done safely. Open source, MIT.">
+<meta name="twitter:description" content="Native macOS menu-bar app. Lid closed—even on battery and without an external display. pmset disablesleep, done safely. Open source, MIT.">
 <meta name="twitter:image" content="https://aboudjem.github.io/Sleepless/og.png">
 
 <link rel="icon" type="image/png" href="icon.png">
@@ -32,7 +32,7 @@
   "name": "Sleepless",
   "operatingSystem": "macOS 26 (Apple Silicon)",
   "applicationCategory": "UtilitiesApplication",
-  "description": "A native macOS menu-bar app that keeps your MacBook awake with the lid closed, on battery, with no external display, using pmset disablesleep, with an auto-off timer and a battery-floor cutoff.",
+  "description": "A native macOS menu-bar app that keeps your MacBook awake with the lid closed—even on battery and without an external display—using pmset disablesleep, with an auto-off timer and a battery-floor cutoff.",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://github.com/Aboudjem/Sleepless",
@@ -304,7 +304,7 @@
     <div class="hero-copy">
       <img class="hero-icon" src="icon.png" alt="Sleepless app icon, a coffee cup">
       <h1>Keep your Mac awake.<br><span class="grad">Lid closed.</span></h1>
-      <p class="lead">Sleepless keeps your MacBook awake with the lid closed, on battery, with no external display. One native menu-bar switch, with an auto-off timer and a battery-floor cutoff so you never drain it flat.</p>
+      <p class="lead">Sleepless keeps your MacBook awake with the lid closed—even on battery and without an external display. One native menu-bar switch, with an auto-off timer and a battery-floor cutoff while the app is running.</p>
       <div class="cta">
         <a class="btn btn-primary" href="https://github.com/Aboudjem/Sleepless/releases/latest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>Download for macOS</a>
         <a class="btn btn-ghost" href="https://github.com/Aboudjem/Sleepless">View source on GitHub</a>
@@ -406,14 +406,14 @@
   <div class="wrap reveal">
     <p class="eyebrow">How it works</p>
     <h2 class="sec">One setting, flipped safely</h2>
-    <p class="lead">Sleepless toggles <code>pmset disablesleep</code>, which flips the kernel's <code>SleepDisabled</code> flag, then reverts it at your battery floor, in Low Power Mode, or when the timer ends. A reboot also resets it. Because a GUI app can't type a password, the installer adds a tightly scoped sudoers rule that permits exactly two commands and nothing else.</p>
+    <p class="lead">Sleepless toggles <code>pmset disablesleep</code>, which flips the kernel's <code>SleepDisabled</code> flag, then, while running, reverts it at your battery floor, in Low Power Mode, when the timer ends, or during graceful Quit. The setting is global across AC and battery power; “on battery, without a display” describes what it enables, not a condition the app checks. A reboot also resets it. Because a GUI app can't type a password, the installer adds a tightly scoped sudoers rule that permits exactly two commands and nothing else.</p>
     <div class="codeblock glass">
       <div class="fname">/etc/sudoers.d/sleepless</div>
       <pre>&lt;you&gt; ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1</pre>
     </div>
     <div class="grid2">
       <div class="tile glass"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>Can't be widened</h3><p>sudoers matches arguments literally with no wildcards, so any other command re-prompts for a password.</p></div>
-      <div class="tile glass"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><h3>No helper to hijack</h3><p>It calls Apple's /usr/bin/pmset directly with an argv array. No daemon, no shell, no helper script.</p></div>
+      <div class="tile glass"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><h3>No passwordless helper</h3><p>The sudoers rule calls Apple's /usr/bin/pmset directly with an argv array. The setup script runs only after explicit authentication.</p></div>
       <div class="tile glass"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></div><h3>Always reversible</h3><p>A reboot resets the flag, the floor and timer turn it off, and uninstall.sh removes the grant and proves it.</p></div>
       <div class="tile glass"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div><h3>Verifiable downloads</h3><p>Releases ship SHA-256 sums and a Sigstore build-provenance attestation. No Apple account needed to check.</p></div>
     </div>
@@ -449,7 +449,7 @@
     <details><summary>How do I keep my MacBook awake with the lid closed without a monitor?</summary><p>Install Sleepless, click the coffee cup in the menu bar, flip the switch on, and close the lid (the laptop screen, also called the flap). It keeps the Mac awake on battery with no external display, using <code>pmset disablesleep</code>. No dummy HDMI plug or clamshell adapter is needed.</p></details>
     <details><summary>Why does my MacBook sleep when I close the lid even with Amphetamine or KeepingYouAwake?</summary><p>Those tools are built on macOS power assertions, which stop the idle timer but cannot override the hardware lid-close trigger. KeepingYouAwake wraps <code>caffeinate</code>, which its maintainer confirms cannot do lid-close. <code>pmset disablesleep</code>, which Sleepless uses, is a lower-level setting that can.</p></details>
     <details><summary>Does pmset disablesleep still work on Apple Silicon (M1/M2/M3)?</summary><p>Yes. <code>pmset -a disablesleep 1</code> sets the kernel's <code>SleepDisabled</code> flag on Apple Silicon, confirmed firsthand on macOS 26.3, which keeps a MacBook awake with the lid closed on battery. Apple does not officially document the setting, so verify it with <code>pmset -g | grep SleepDisabled</code>. Most claims that it stopped working describe <code>caffeinate</code>, a different mechanism.</p></details>
-    <details><summary>Is it safe to run a MacBook with the lid closed? Will it overheat or drain the battery?</summary><p>It is safe for light, unattended work like downloads, syncs, or a hotspot. Heavy sustained load with the lid fully closed reduces airflow, so use judgement there. Sleepless turns itself off at the floor you set and in Low Power Mode, and the auto-off timer caps how long it stays on.</p></details>
+    <details><summary>Is it safe to run a MacBook with the lid closed? Will it overheat or drain the battery?</summary><p>It is suitable for light, unattended work like downloads, syncs, or a hotspot. Heavy sustained load with the lid fully closed reduces airflow, so use judgement there. While Sleepless is running, the battery floor, Low Power Mode, and timer attempt to restore sleep; graceful Quit does too. A force-quit or crash cannot run cleanup, so reboot or run <code>sudo pmset -a disablesleep 0</code> if that happens.</p></details>
     <details><summary>Does Sleepless require sudo, a kernel extension, or a background daemon?</summary><p>It needs one tightly scoped <code>sudo</code> grant (two exact <code>pmset</code> commands, nothing else) so a GUI app can flip the setting without a password prompt. There is no kernel extension and no background daemon. The whole app is a single AppKit file.</p></details>
     <details><summary>Can I run AI agents or long jobs overnight with the lid closed?</summary><p>Yes. Switch Sleepless on, set a battery floor, close the lid, and an agent run, build, render, or training job keeps going. Plug in for an all-nighter, or stay on battery with a floor and timer so it stops itself before the battery runs low.</p></details>
   </div>

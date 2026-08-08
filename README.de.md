@@ -17,8 +17,8 @@
 </p>
 
 <p align="center">
-  <b>Halte dein MacBook bei geschlossenem Deckel wach, im Akkubetrieb, ohne externen Bildschirm.</b><br>
-  <sub>Ein Schalter in der Menüleiste, mit Abschalt-Timer und Abschaltung bei Akku-Mindeststand, damit du ihn nie ganz leerziehst.</sub>
+  <b>Halte dein MacBook bei geschlossenem Deckel wach — sogar im Akkubetrieb und ohne externen Bildschirm.</b><br>
+  <sub>Ein Schalter in der Menüleiste, mit Abschalt-Timer und Abschaltung bei Akku-Mindeststand, solange die App läuft.</sub>
 </p>
 
 <p align="center">
@@ -41,7 +41,7 @@
 </p>
 
 > [!NOTE]
-> Ein geschlossener Deckel schickt deinen Mac in den Ruhezustand, und `caffeinate`-Apps (KeepingYouAwake und Co.) können das von Haus aus nicht ändern. Sleepless legt die eine Einstellung um, die es kann, `pmset disablesleep`, mit Sicherheitsnetzen, sodass du es bedenkenlos vergessen kannst.
+> Ein geschlossener Deckel schickt deinen Mac in den Ruhezustand, und `caffeinate`-Apps (KeepingYouAwake und Co.) können das von Haus aus nicht ändern. Sleepless legt die eine Einstellung um, die es kann, `pmset disablesleep`, mit Sicherheitsnetzen, solange die App läuft.
 
 ## Installation
 
@@ -66,7 +66,7 @@ Klicke dann auf die Tasse in der Menüleiste, lege den Schalter um und schließe
 | 🔋 | **Akku-Mindeststand** | Auto-Abschaltung bei 5–50 % im Akkubetrieb (Standard 15 %). |
 | 🪫 | **Low Power Mode** | Tritt zur Seite, wenn LPM im Akkubetrieb aktiv ist. |
 | 🖥️ | **Kein Dongle** | Deckel geschlossen, im Akkubetrieb. Kein Monitor, kein HDMI-Stecker. |
-| 🚀 | **Beim Anmelden starten** | Optional, standardmäßig aus, startet immer ausgeschaltet. |
+| 🚀 | **Beim Anmelden starten** | Optional, standardmäßig aus; aktiviert beim Start niemals selbst den Wachmodus. |
 | 🪶 | **Winzig und nativ** | Eine AppKit-Datei. Kein Dock-Symbol, kein Daemon, keine kext. |
 
 **Menüleisten-Glyph:** leere Tasse = aus · volle Tasse = wach · volle Tasse mit Punkt = wach im Akkubetrieb (Auto-Abschaltung aktiv).
@@ -92,18 +92,18 @@ Klicke dann auf die Tasse in der Menüleiste, lege den Schalter um und schließe
 - 🖥️ Einen lokalen Server oder eine SSH-Sitzung erreichbar zu halten.
 
 > [!TIP]
-> Setze einen Akku-Mindeststand, dem du vertraust (etwa 20 %), plus einen Timer, dann kannst du weggehen, ohne den Akku im Auge behalten zu müssen.
+> Setze einen Akku-Mindeststand plus einen Timer und lass Sleepless laufen, während du weg bist.
 
 ## So funktioniert es
 
-Sleepless schaltet `pmset disablesleep` um (das `SleepDisabled`-Flag des Kernels), liest es zurück, sodass die Menüleiste nie lügt, und setzt es bei deinem Akku-Mindeststand, im Low Power Mode, beim Ablaufen des Timers oder beim Neustart zurück. Eine GUI-App kann kein Passwort eintippen, deshalb fügt das Installationsprogramm eine eng gefasste sudoers-Regel für **genau zwei Befehle** hinzu:
+Sleepless schaltet `pmset disablesleep` um (das `SleepDisabled`-Flag des Kernels), liest es zurück und setzt es, solange die App läuft, bei deinem Akku-Mindeststand, im Low Power Mode, beim Ablaufen des Timers oder beim normalen Beenden zurück. Die Einstellung gilt global im Netz- und Akkubetrieb; „im Akkubetrieb und ohne externen Bildschirm“ beschreibt die Möglichkeit, nicht eine von der App geprüfte Bedingung. Ein Neustart setzt es ebenfalls zurück. Eine GUI-App kann kein Passwort eintippen, deshalb fügt das Installationsprogramm eine eng gefasste sudoers-Regel für **genau zwei Befehle** hinzu:
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
 ```
 
 - **Lässt sich nicht ausweiten.** sudoers gleicht Argumente wörtlich ab, ohne Platzhalter.
-- **Nichts zum Kapern.** Kein Daemon, kein Hilfsskript, keine Shell. Es ruft `/usr/bin/pmset` direkt auf.
+- **Kein passwortloses Hilfsskript.** Die sudoers-Regel ruft `/usr/bin/pmset` direkt mit einem Argument-Array auf. Das Setup-Shellskript läuft nur nach ausdrücklicher Authentifizierung.
 - **Immer reversibel.** Neustart, der Mindeststand, der Timer oder `./uninstall.sh` (das belegt, dass die Berechtigung weg ist).
 
 Einen Download überprüfen, kein Apple-Konto nötig:
@@ -132,7 +132,7 @@ Diese nutzen die Power Assertions von macOS, die den Leerlauf-Timer stoppen, abe
 <details>
 <summary><b>Ist es sicher? Überhitzt es oder zieht es den Akku leer?</b></summary>
 
-Für leichte, unbeaufsichtigte Arbeit (Downloads, Synchronisierungen, einen Hotspot) ist es sicher. Schwere Dauerlast bei ganz geschlossenem Deckel verringert den Luftstrom, geh also mit Augenmaß vor. Der Akku-Mindeststand, die Auto-Abschaltung im Low Power Mode und der Timer stoppen es alle, bevor es den Mac leerzieht.
+Für leichte, unbeaufsichtigte Arbeit (Downloads, Synchronisierungen, einen Hotspot) ist es geeignet. Solange Sleepless läuft, versuchen Akku-Mindeststand, Low Power Mode und Timer den normalen Ruhezustand wiederherzustellen; ein normales Beenden tut dies ebenfalls. Nach Absturz oder erzwungenem Beenden ist ein Neustart oder `sudo pmset -a disablesleep 0` nötig.
 </details>
 
 <details>

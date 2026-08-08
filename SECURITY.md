@@ -43,6 +43,10 @@ substituted for `__USER__`), owned `root:wheel`, mode `0440`:
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
 ```
 
+That line comes from `sleepless.sudoers.template`, which is bundled beside `grant.sh`.
+The installer previews the generated template, and `grant.sh` refuses to continue if the
+template is missing; there is no second executable copy that can drift from what is shown.
+
 **This grant lets one user run, as root, exactly two fully-specified commands and nothing
 else.** sudoers matches command arguments *literally* — and this rule contains **no
 wildcards** — so the match is total. From the sudoers manual: *"If a Cmnd has associated
@@ -57,10 +61,19 @@ Consequences you can rely on:
 - Sleepless calls `sudo` with an **argv array**, not a shell string
   (`Process.arguments` in `App.swift`), so there is no `/bin/sh -c`, no command
   substitution, and no word-splitting surface inside the app.
-- There is **no helper script**. The classic sudoers footgun is a *user-writable* script
-  that root executes — rewrite it, get root. Sleepless points the rule directly at Apple's
-  `/usr/bin/pmset`, and the sudoers file itself is `root:wheel 0440` (you cannot modify it
-  without `sudo`). Both mitigations are exactly what the literature prescribes.
+- There is **no helper script in the passwordless rule**. The classic sudoers footgun is a
+  *user-writable* script that root can execute without authentication — rewrite it, get root.
+  Sleepless points the rule directly at Apple's `/usr/bin/pmset`, and the sudoers file itself
+  is `root:wheel 0440` (you cannot modify it without `sudo`). The separately bundled
+  `grant.sh` runs only during explicit, authenticated setup; its username is constrained
+  before sudoers interpolation and its privileged tools use absolute system paths.
+- Output that the app parses from `sudo` and `pmset` runs under the fixed `C` locale.
+  An unexpected battery response is treated as indeterminate and turns keep-awake off,
+  rather than silently assuming a full battery.
+
+Launch at login uses Apple's `SMAppService.mainApp` exclusively. The source installer no
+longer creates a parallel `~/Library/LaunchAgents` job and removes that obsolete job when
+upgrading an installation that used it.
 
 ## Honest residual risk
 
@@ -79,9 +92,11 @@ you can toggle `sudo pmset -a disablesleep 1/0` manually instead and skip the gr
 for Sleepless to leave your Mac permanently unable to sleep. Verify it yourself: toggle on,
 reboot, then `pmset -g | grep SleepDisabled` should read `0`.
 
-Sleepless adds a second belt-and-suspenders: a **battery-floor auto-off** (default 15%)
-that flips the flag back to `0` while the Mac is awake and discharging, so a forgotten
-"on" state can't drain the battery to empty.
+Sleepless adds a second belt-and-suspenders: while the app is running, a
+**battery-floor auto-off** (default 15%) flips the flag back to `0` while the Mac is awake
+and discharging. Graceful termination also attempts to restore normal sleep. A hard crash
+or force-quit cannot run cleanup; in that case, reboot or run
+`sudo pmset -a disablesleep 0`.
 
 ## Code signing, notarization, and Gatekeeper
 
@@ -125,6 +140,11 @@ gh attestation verify Sleepless-<version>.zip -R Aboudjem/Sleepless   # built by
 
 The full walkthrough (what each check proves, how to reproduce the build, and a VirusTotal
 scan) is in **[docs/AUDIT.md](docs/AUDIT.md)**.
+
+The release workflow checks out the requested version tag, requires a GitHub-verified signature
+on its commit, verifies that both plist version fields match it, pins third-party Actions by
+commit SHA, and refuses to overwrite an existing release. Those checks keep a manual workflow
+run from silently replacing a tagged artifact.
 
 ## Completely removing the privilege
 

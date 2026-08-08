@@ -17,8 +17,8 @@
 </p>
 
 <p align="center">
-  <b>Mantén tu MacBook despierto con la tapa cerrada, con batería y sin pantalla externa.</b><br>
-  <sub>Un interruptor en la barra de menús, con temporizador de apagado automático y corte por nivel mínimo de batería para que nunca la agotes del todo.</sub>
+  <b>Mantén tu MacBook despierto con la tapa cerrada, incluso con batería y sin pantalla externa.</b><br>
+  <sub>Un interruptor en la barra de menús, con temporizador y corte por nivel mínimo de batería mientras la app esté en ejecución.</sub>
 </p>
 
 <p align="center">
@@ -41,7 +41,7 @@
 </p>
 
 > [!NOTE]
-> Cerrar la tapa pone tu Mac a dormir, y las apps basadas en `caffeinate` (KeepingYouAwake y similares) no pueden evitarlo, por diseño. Sleepless activa el único ajuste que sí puede, `pmset disablesleep`, con redes de seguridad para que sea seguro olvidarse de él.
+> Cerrar la tapa pone tu Mac a dormir, y las apps basadas en `caffeinate` (KeepingYouAwake y similares) no pueden evitarlo, por diseño. Sleepless activa el único ajuste que sí puede, `pmset disablesleep`, con redes de seguridad mientras la app esté en ejecución.
 
 ## Instalación
 
@@ -66,7 +66,7 @@ Luego haz clic en la taza de la barra de menús, activa el interruptor y cierra 
 | 🔋 | **Nivel mínimo de batería** | Apagado automático al 5–50 % con batería (15 % por defecto). |
 | 🪫 | **Low Power Mode** | Se hace a un lado cuando LPM está activado, con batería. |
 | 🖥️ | **Sin adaptador** | Tapa cerrada, con batería. Sin monitor, sin enchufe HDMI. |
-| 🚀 | **Iniciar al iniciar sesión** | Opcional, desactivado por defecto, siempre arranca apagado. |
+| 🚀 | **Iniciar al iniciar sesión** | Opcional, desactivado por defecto; nunca activa por sí solo el modo despierto al arrancar. |
 | 🪶 | **Diminuto y nativo** | Un archivo de AppKit. Sin icono en el Dock, daemon ni kext. |
 
 **Glifo de la barra de menús:** taza vacía = apagado · taza llena = despierto · taza llena con punto = despierto con batería (apagado automático en vivo).
@@ -92,18 +92,18 @@ Luego haz clic en la taza de la barra de menús, activa el interruptor y cierra 
 - 🖥️ Mantener accesible un servidor local o una sesión SSH.
 
 > [!TIP]
-> Fija un nivel mínimo de batería en el que confíes (digamos 20 %) más un temporizador, y podrás alejarte sin tener que vigilar la batería.
+> Fija un nivel mínimo y un temporizador, y deja Sleepless en ejecución mientras estés fuera.
 
 ## Cómo funciona
 
-Sleepless activa `pmset disablesleep` (el indicador `SleepDisabled` del kernel), vuelve a leerlo para que la barra de menús nunca mienta, y lo revierte en tu nivel mínimo de batería, en Low Power Mode, cuando el temporizador termina o al reiniciar. Una app gráfica no puede escribir una contraseña, así que el instalador añade una regla de sudoers de alcance reducido para **exactamente dos comandos**:
+Sleepless activa `pmset disablesleep` (el indicador `SleepDisabled` del kernel), vuelve a leerlo y, mientras se ejecuta, lo revierte en tu nivel mínimo, en Low Power Mode, cuando termina el temporizador o al salir normalmente. El ajuste es global tanto con corriente como con batería; «con batería y sin pantalla» describe lo que permite, no una condición que compruebe la app. Un reinicio también lo restablece. Una app gráfica no puede escribir una contraseña, así que el instalador añade una regla de sudoers de alcance reducido para **exactamente dos comandos**:
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
 ```
 
 - **No se puede ampliar.** sudoers coincide con los argumentos de forma literal, sin comodines.
-- **Nada que secuestrar.** Sin daemon, sin script auxiliar, sin shell. Llama directamente a `/usr/bin/pmset`.
+- **Sin auxiliar sin contraseña.** La regla sudoers llama directamente a `/usr/bin/pmset` con un vector de argumentos. El script de configuración solo se ejecuta tras una autenticación explícita.
 - **Siempre reversible.** Un reinicio, el nivel mínimo, el temporizador o `./uninstall.sh` (que demuestra que el permiso ha desaparecido).
 
 Verifica una descarga, sin necesidad de cuenta de Apple:
@@ -132,7 +132,7 @@ Esas usan aserciones de energía de macOS, que detienen el temporizador de inact
 <details>
 <summary><b>¿es seguro? ¿se sobrecalentará o agotará la batería?</b></summary>
 
-Es seguro para trabajo ligero y sin supervisión (descargas, sincronizaciones, un punto de acceso). Una carga sostenida y pesada con la tapa totalmente cerrada reduce el flujo de aire, así que usa el sentido común. El nivel mínimo de batería, el apagado automático en Low Power Mode y el temporizador lo detienen todos antes de que agote el Mac.
+Es adecuado para trabajo ligero y sin supervisión (descargas, sincronizaciones, un punto de acceso). Mientras Sleepless se ejecuta, el nivel mínimo, Low Power Mode y el temporizador intentan restaurar el reposo; una salida normal también lo hace. Tras un cierre forzado o fallo, reinicia o ejecuta `sudo pmset -a disablesleep 0`.
 </details>
 
 <details>

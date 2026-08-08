@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Constrained and verified the account name before writing it into sudoers, switched
+  privileged setup tools to absolute system paths, and passed setup values to AppleScript
+  as separately shell-quoted arguments.
+- Pinned every GitHub Action to an immutable commit, bound manual release runs to a
+  GitHub-verified signed commit at the requested tag and plist version, and made published
+  release assets immutable.
+
+### Fixed
+- Automatic cutoffs now check and report the real `sudo`/`pmset` outcome instead of
+  announcing success after a failure, and timer cutoffs retry transient failures.
+- Graceful termination now attempts to restore normal sleep. A hard crash or force-quit
+  still cannot execute cleanup; reboot remains the final backstop.
+- Battery safety now fails closed when `pmset` output is missing or unparseable; parsed
+  command output uses the fixed `C` locale, and unexpected toggle failures are visible.
+- Menu-bar glyphs now share a fixed canvas and square status-item slot so state changes
+  cannot resize the item. The app does not override the user's menu-bar visibility choice.
+- Launch at login now has one source of truth (`SMAppService`); the installer no longer
+  creates a parallel LaunchAgent and removes its own obsolete agent on upgrade.
+- The bundled sudoers template is now the sole executable source of the grant shown and
+  installed. Setup refuses to continue if that template is missing.
+- Clarified that `pmset disablesleep` applies globally; battery/no-display language describes
+  a supported use case, not a condition checked before enabling it.
+
+### Added
+- Added CI regression checks for the privilege and release-provenance invariants above.
+
 ## [1.2.7] - 2026-06-03
 
 ### Changed

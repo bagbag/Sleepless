@@ -19,8 +19,8 @@
 </p>
 
 <p align="center">
-  <b>合盖、使用电池、没有外接显示器，照样让 MacBook 保持唤醒。</b><br>
-  <sub>一个菜单栏开关，配自动关闭定时器和电量下限截止，让你永远不会把电耗光。</sub>
+  <b>合盖后仍让 MacBook 保持唤醒，即使使用电池且没有外接显示器。</b><br>
+  <sub>一个菜单栏开关，配有在应用运行期间生效的自动关闭定时器和电量下限截止。</sub>
 </p>
 
 <p align="center">
@@ -43,7 +43,7 @@
 </p>
 
 > [!NOTE]
-> 合上盖子会让 Mac 睡眠，基于 `caffeinate` 的应用（KeepingYouAwake 之类）从设计上就改变不了这件事。Sleepless 切换的是唯一能做到的那个设置，`pmset disablesleep`，再配上安全机制，所以你大可放心地把它忘掉。
+> 合上盖子会让 Mac 睡眠，基于 `caffeinate` 的应用从设计上就改变不了这件事。Sleepless 切换 `pmset disablesleep`，并在应用运行期间启用安全机制。
 
 ## 安装
 
@@ -68,7 +68,7 @@ brew install --cask aboudjem/tap/sleepless
 | 🔋 | **电量下限** | 电池供电时在 5–50% 自动关闭（默认 15%）。 |
 | 🪫 | **Low Power Mode** | 电池供电下若 LPM 开启，自动让位。 |
 | 🖥️ | **无需转接** | 合盖、电池供电即可。不用显示器，不用 HDMI 插头。 |
-| 🚀 | **登录时启动** | 可选，默认关闭，始终以关闭状态启动。 |
+| 🚀 | **登录时启动** | 可选，默认关闭；启动时绝不会自行开启保持唤醒。 |
 | 🪶 | **小巧且原生** | 一个 AppKit 文件。无 Dock 图标、守护进程或 kext。 |
 
 **菜单栏图标：** 空杯 = 关闭 · 满杯 = 唤醒 · 满杯加一个点 = 电池供电下唤醒（自动关闭生效中）。
@@ -94,18 +94,18 @@ brew install --cask aboudjem/tap/sleepless
 - 🖥️ 让本地服务器或 SSH 会话保持可达。
 
 > [!TIP]
-> 设一个你信得过的电量下限（比如 20%）再加一个定时器，你就能放心走开，不用一直盯着电量。
+> 设置电量下限和定时器，并在离开期间让 Sleepless 保持运行。
 
 ## 工作原理
 
-Sleepless 切换 `pmset disablesleep`（内核的 `SleepDisabled` 标志），把它读回来让菜单栏绝不撒谎，并在到达你的电量下限、进入 Low Power Mode、定时器结束或重启时把它还原。GUI 应用没法输入密码，所以安装程序会加一条范围严格限定的 sudoers 规则，**只允许两条命令**：
+Sleepless 切换并读回 `pmset disablesleep`（内核的 `SleepDisabled` 标志）；应用运行期间会在达到电量下限、进入 Low Power Mode、定时器结束或正常退出时还原它。这个设置对外接电源和电池供电都全局生效；“使用电池且没有外接显示器”描述的是它支持的用法，而不是应用检查的条件。重启也会重置。GUI 应用没法输入密码，所以安装程序会加一条范围严格限定的 sudoers 规则，**只允许两条命令**：
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
 ```
 
 - **无法被放宽。** sudoers 按字面匹配参数，没有通配符。
-- **没有可劫持的东西。** 没有守护进程、辅助脚本或 shell。它直接调用 `/usr/bin/pmset`。
+- **没有免密辅助程序。** sudoers 规则通过参数数组直接调用 `/usr/bin/pmset`；设置脚本只会在明确认证后运行。
 - **始终可逆。** 重启、电量下限、定时器，或 `./uninstall.sh`（它会证明授权已经清除）。
 
 验证一个下载，无需 Apple 账户：
@@ -134,7 +134,7 @@ gh attestation verify Sleepless-*.zip -R Aboudjem/Sleepless
 <details>
 <summary><b>合盖运行安全吗？会过热或耗光电池吗？</b></summary>
 
-对于下载、同步、共享热点这类轻量、无人看管的任务来说是安全的。完全合盖下长时间高负载会限制散热气流，所以请自己掂量。电量下限、Low Power Mode 自动关闭和定时器都会在 Mac 电量见底之前把它停下来。
+它适合下载、同步、共享热点这类轻量、无人看管的任务。Sleepless 运行期间，电量下限、Low Power Mode、定时器和正常退出都会尝试恢复睡眠。强制退出或崩溃后，请重启或运行 `sudo pmset -a disablesleep 0`。
 </details>
 
 <details>

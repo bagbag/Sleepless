@@ -17,8 +17,8 @@
 </p>
 
 <p align="center">
-  <b>Gardez votre MacBook éveillé capot fermé, sur batterie, sans écran externe.</b><br>
-  <sub>Un seul interrupteur dans la barre des menus, avec minuterie d'extinction automatique et coupure au plancher de batterie pour ne jamais la vider à plat.</sub>
+  <b>Gardez votre MacBook éveillé capot fermé, même sur batterie et sans écran externe.</b><br>
+  <sub>Un seul interrupteur dans la barre des menus, avec minuterie et coupure au plancher de batterie tant que l'application fonctionne.</sub>
 </p>
 
 <p align="center">
@@ -41,7 +41,7 @@
 </p>
 
 > [!NOTE]
-> Capot fermé, votre Mac se met en veille, et les applis basées sur `caffeinate` (KeepingYouAwake et consorts) ne peuvent rien y changer, c'est voulu par conception. Sleepless bascule le seul réglage qui le peut, `pmset disablesleep`, avec des filets de sécurité pour que vous puissiez l'oublier sans risque.
+> Capot fermé, votre Mac se met en veille, et les applis basées sur `caffeinate` (KeepingYouAwake et consorts) ne peuvent rien y changer. Sleepless bascule `pmset disablesleep`, avec des filets de sécurité tant que l'application fonctionne.
 
 ## Installation
 
@@ -66,7 +66,7 @@ Cliquez ensuite sur la tasse dans la barre des menus, basculez l'interrupteur et
 | 🔋 | **Plancher de batterie** | Extinction automatique entre 5 et 50 % sur batterie (15 % par défaut). |
 | 🪫 | **Mode Économie d'énergie** | S'efface quand le mode Économie d'énergie est actif, sur batterie. |
 | 🖥️ | **Sans dongle** | Capot fermé, sur batterie. Sans moniteur, sans fiche HDMI. |
-| 🚀 | **Lancer à l'ouverture de session** | Optionnel, désactivé par défaut, démarre toujours à l'arrêt. |
+| 🚀 | **Lancer à l'ouverture de session** | Optionnel, désactivé par défaut ; n'active jamais seul le maintien éveillé au démarrage. |
 | 🪶 | **Minuscule et native** | Un seul fichier AppKit. Sans icône dans le Dock, démon ni kext. |
 
 **Glyphe de la barre des menus :** tasse vide = arrêt · tasse pleine = éveillé · tasse pleine + point = éveillé sur batterie (extinction automatique active).
@@ -92,18 +92,18 @@ Cliquez ensuite sur la tasse dans la barre des menus, basculez l'interrupteur et
 - 🖥️ Garder un serveur local ou une session SSH joignable.
 
 > [!TIP]
-> Réglez un plancher de batterie de confiance (disons 20 %) plus une minuterie, et vous pouvez partir sans surveiller la batterie.
+> Réglez un plancher de batterie et une minuterie, puis laissez Sleepless fonctionner pendant votre absence.
 
 ## Comment ça marche
 
-Sleepless bascule `pmset disablesleep` (le drapeau `SleepDisabled` du noyau), le relit pour que la barre des menus ne mente jamais, et le rétablit à votre plancher de batterie, en mode Économie d'énergie, à la fin de la minuterie ou au redémarrage. Une application graphique ne peut pas saisir de mot de passe, alors l'installateur ajoute une règle sudoers au périmètre strict pour **exactement deux commandes** :
+Sleepless bascule `pmset disablesleep` (le drapeau `SleepDisabled` du noyau), le relit et, tant qu'il fonctionne, le rétablit au plancher de batterie, en mode Économie d'énergie, à la fin de la minuterie ou lors d'une fermeture normale. Le réglage est global sur secteur comme sur batterie ; « sur batterie et sans écran » décrit ce qu'il permet, pas une condition vérifiée par l'application. Un redémarrage le réinitialise aussi. Une application graphique ne peut pas saisir de mot de passe, alors l'installateur ajoute une règle sudoers au périmètre strict pour **exactement deux commandes** :
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
 ```
 
 - **Impossible à élargir.** sudoers compare les arguments littéralement, sans jokers.
-- **Rien à détourner.** Pas de démon, pas de script auxiliaire, pas de shell. Elle appelle `/usr/bin/pmset` directement.
+- **Aucun auxiliaire sans mot de passe.** La règle sudoers appelle directement `/usr/bin/pmset` avec un tableau d'arguments. Le script d'installation ne s'exécute qu'après une authentification explicite.
 - **Toujours réversible.** Le redémarrage, le plancher, la minuterie ou `./uninstall.sh` (qui prouve que l'autorisation a disparu).
 
 Vérifiez un téléchargement, sans compte Apple :
@@ -132,7 +132,7 @@ Ces outils utilisent les assertions d'alimentation de macOS, qui arrêtent la mi
 <details>
 <summary><b>Est-ce sûr ? Va-t-il surchauffer ou vider la batterie ?</b></summary>
 
-C'est sûr pour des tâches légères et sans surveillance (téléchargements, synchronisations, point d'accès). Une charge soutenue et intense capot complètement fermé réduit la circulation de l'air, alors faites preuve de jugement. Le plancher de batterie, l'extinction automatique en mode Économie d'énergie et la minuterie l'arrêtent tous avant qu'il ne vide le Mac.
+C'est adapté aux tâches légères et sans surveillance (téléchargements, synchronisations, point d'accès). Tant que Sleepless fonctionne, le plancher de batterie, le mode Économie d'énergie et la minuterie tentent de rétablir la veille ; une fermeture normale le fait aussi. Après un arrêt forcé ou un plantage, redémarrez ou exécutez `sudo pmset -a disablesleep 0`.
 </details>
 
 <details>

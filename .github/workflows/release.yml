@@ -24,15 +24,43 @@ jobs:
     name: Build, attest, and publish
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Resolve tag and version
         id: ver
+        env:
+          REQUESTED_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="$REQUESTED_TAG"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::invalid release tag: $TAG"; exit 1; }
           echo "tag=$TAG"            >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}"    >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.ver.outputs.tag }}
+          persist-credentials: false
+
+      - name: Security regression checks
+        run: bash tests/security-regressions.sh
+
+      - name: Verify release identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          git tag --points-at HEAD | grep -Fx -- "$TAG" >/dev/null \
+            || { echo "::error::checkout is not the requested tag $TAG"; exit 1; }
+          PLIST_SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)"
+          PLIST_BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)"
+          [[ "$PLIST_SHORT_VERSION" = "$VERSION" && "$PLIST_BUILD_VERSION" = "$VERSION" ]] \
+            || { echo "::error::Info.plist version does not match $TAG"; exit 1; }
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          VERIFIED="$(gh api "repos/$GITHUB_REPOSITORY/commits/$COMMIT_SHA" --jq '.commit.verification.verified')"
+          [[ "$VERIFIED" = "true" ]] \
+            || { echo "::error::tagged commit $COMMIT_SHA does not have a GitHub-verified signature"; exit 1; }
 
       - name: Toolchain
         run: |
@@ -63,7 +91,7 @@ jobs:
           shasum -a 256 "${{ steps.zip.outputs.asset }}" | tee SHA256SUMS
 
       - name: Attest build provenance (SLSA)
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: ${{ steps.zip.outputs.asset }}
 
@@ -97,10 +125,9 @@ jobs:
           TAG="${{ steps.ver.outputs.tag }}"
           ASSET="${{ steps.zip.outputs.asset }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ASSET" SHA256SUMS --clobber
-            gh release edit "$TAG" --notes-file NOTES.md --title "Sleepless ${{ steps.ver.outputs.version }}"
-          else
-            gh release create "$TAG" "$ASSET" SHA256SUMS \
-              --title "Sleepless ${{ steps.ver.outputs.version }}" \
-              --notes-file NOTES.md
+            echo "::error::release $TAG already exists; published assets are immutable"
+            exit 1
           fi
+          gh release create "$TAG" "$ASSET" SHA256SUMS \
+            --title "Sleepless ${{ steps.ver.outputs.version }}" \
+            --notes-file NOTES.md

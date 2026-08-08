@@ -17,8 +17,8 @@
 </p>
 
 <p align="center">
-  <b>Keep your MacBook awake with the lid closed, on battery, with no external display.</b><br>
-  <sub>One menu-bar switch, with an auto-off timer and a battery-floor cutoff so you never drain it flat.</sub>
+  <b>Keep your MacBook awake with the lid closed—even on battery and without an external display.</b><br>
+  <sub>One menu-bar switch, with an auto-off timer and a battery-floor cutoff while the app is running.</sub>
 </p>
 
 <p align="center">
@@ -41,7 +41,7 @@
 </p>
 
 > [!NOTE]
-> A closed lid sleeps your Mac, and `caffeinate` apps (KeepingYouAwake and friends) can't change that, by design. Sleepless flips the one setting that can, `pmset disablesleep`, with safety nets so it is safe to forget.
+> A closed lid sleeps your Mac, and `caffeinate` apps (KeepingYouAwake and friends) can't change that, by design. Sleepless flips the one setting that can, `pmset disablesleep`, with safety nets while the app is running.
 
 ## Install
 
@@ -66,7 +66,7 @@ Then click the cup in the menu bar, flip the switch, and close the lid.
 | 🔋 | **Battery floor** | Auto-off at 5–50% on battery (default 15%). |
 | 🪫 | **Low Power Mode** | Steps aside when LPM is on, on battery. |
 | 🖥️ | **No dongle** | Lid closed, on battery. No monitor, no HDMI plug. |
-| 🚀 | **Launch at login** | Optional, off by default, always starts idle. |
+| 🚀 | **Launch at login** | Optional, off by default, never enables keep-awake on launch. |
 | 🪶 | **Tiny + native** | One AppKit file. No Dock icon, daemon, or kext. |
 
 **Menu-bar glyph:** empty cup = off · full cup = awake · full cup + dot = awake on battery (auto-off live).
@@ -92,18 +92,18 @@ Then click the cup in the menu bar, flip the switch, and close the lid.
 - 🖥️ Keep a local server or SSH session reachable.
 
 > [!TIP]
-> Set a battery floor you trust (say 20%) plus a timer, and you can walk away without babysitting the battery.
+> Set a battery floor you trust (say 20%) plus a timer, and leave Sleepless running while you are away.
 
 ## How it works
 
-Sleepless toggles `pmset disablesleep` (the kernel's `SleepDisabled` flag), reads it back so the menu bar never lies, and reverts it at your battery floor, in Low Power Mode, when the timer ends, or on reboot. A GUI app can't type a password, so the installer adds a scoped sudoers rule for **exactly two commands**:
+Sleepless toggles `pmset disablesleep` (the kernel's `SleepDisabled` flag), reads it back so the menu bar never lies, and, while running, reverts it at your battery floor, in Low Power Mode, when the timer ends, or during graceful Quit. The setting is global across AC and battery power; “on battery, without a display” describes what it enables, not a condition the app checks. A reboot also resets it. A GUI app can't type a password, so the installer adds a scoped sudoers rule for **exactly two commands**:
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
 ```
 
 - **Can't be widened.** sudoers matches arguments literally, no wildcards.
-- **Nothing to hijack.** No daemon, no helper script, no shell. It calls `/usr/bin/pmset` directly.
+- **Nothing passwordless to hijack.** No daemon or helper script is named by sudoers; normal toggles call `/usr/bin/pmset` directly with an argv array. The setup shell script runs only after explicit authentication.
 - **Always reversible.** Reboot, the floor, the timer, or `./uninstall.sh` (which proves the grant is gone).
 
 Verify a download, no Apple account needed:
@@ -132,7 +132,7 @@ Those use macOS power assertions, which stop the idle timer but can't override t
 <details>
 <summary><b>Is it safe? Will it overheat or drain the battery?</b></summary>
 
-It is safe for light unattended work (downloads, syncs, a hotspot). Heavy sustained load with the lid fully shut reduces airflow, so use judgement. The battery floor, Low Power Mode auto-off, and the timer all stop it before it drains the Mac.
+It is suitable for light unattended work (downloads, syncs, a hotspot). Heavy sustained load with the lid fully shut reduces airflow, so use judgement. While Sleepless is running, the battery floor, Low Power Mode auto-off, and timer attempt to restore sleep; graceful Quit does too. A force-quit or crash cannot run cleanup, so reboot or run `sudo pmset -a disablesleep 0` if that happens.
 </details>
 
 <details>

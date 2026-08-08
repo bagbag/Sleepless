@@ -14,9 +14,9 @@ The whole app is one file. To satisfy yourself it does what it claims and nothin
 
 | Read | What you are checking |
 |---|---|
-| [`App.swift`](../App.swift) | The only thing it runs as root is `sudo -n /usr/bin/pmset -a disablesleep 0/1` (`setDisableSleep`). No network calls, no file writes outside `UserDefaults`, no shell strings. |
-| [`sleepless.sudoers.template`](../sleepless.sudoers.template) / [`grant.sh`](../grant.sh) | The passwordless grant permits exactly those two fully-specified commands, no wildcards, installed `root:wheel 0440`. |
-| [`build.sh`](../build.sh) | `swiftc` + a hand-assembled, ad-hoc-signed bundle. No downloaded blobs, no install-time scripts baked into the binary. |
+| [`App.swift`](../App.swift) | Normal toggles run only `sudo -n /usr/bin/pmset -a disablesleep 0/1` via an argv array. The one-time setup passes separately quoted arguments to the authenticated `grant.sh`. There are no network calls. |
+| [`sleepless.sudoers.template`](../sleepless.sudoers.template) / [`grant.sh`](../grant.sh) | The bundled template is the only executable source of the grant. It permits exactly two fully-specified commands, no wildcards, installed `root:wheel 0440`; the username is validated before interpolation. |
+| [`build.sh`](../build.sh) | `swiftc` + a hand-assembled, ad-hoc-signed bundle. It copies the grant template beside `grant.sh`; no downloaded blobs are baked into the binary. |
 | [`uninstall.sh`](../uninstall.sh) | Removes the app, the login item, and the sudoers drop-in, then proves `sudo -n pmset …` prompts again. |
 
 The single privileged file on your system is `/etc/sudoers.d/sleepless-disablesleep`. Read
@@ -45,6 +45,11 @@ What each one proves:
   leak. This is the strong link from "the source you can read" to "the binary you ran." It
   needs the GitHub CLI (`brew install gh`); the attestation itself lives in this repo and on
   the public Sigstore transparency log.
+
+The workflow itself pins its Actions by full commit SHA, checks out the requested tag, requires
+a GitHub-verified signature on the tagged commit, requires `Info.plist` to carry the same
+version, and refuses to overwrite an existing release. The commit reported by attestation
+verification should therefore be the signed commit for the tag you intended to install.
 
 Neither check is Gatekeeper. macOS still treats the prebuilt app as unnotarized (see
 [SECURITY.md](../SECURITY.md#code-signing-notarization-and-gatekeeper)). The point of these
