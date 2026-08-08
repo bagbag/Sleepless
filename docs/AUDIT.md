@@ -14,7 +14,7 @@ The whole app is one file. To satisfy yourself it does what it claims and nothin
 
 | Read | What you are checking |
 |---|---|
-| [`App.swift`](../App.swift) | Normal toggles run only `sudo -n /usr/bin/pmset -a disablesleep 0/1` via an argv array. The one-time setup passes separately quoted arguments to the authenticated `grant.sh`. There are no network calls. |
+| [`App.swift`](../App.swift) | Normal toggles run only `sudo -n /usr/bin/pmset -a disablesleep 0/1` via an argv array. Lid-close display saving proactively zeros only the built-in brightness through two Apple symbols resolved from a fixed system path; unprivileged `pmset displaysleepnow` then sleeps the sole display, or all displays when the default-off UI switch explicitly requests it. No keyboard or pointer events are monitored. The one-time setup passes separately quoted arguments to the authenticated `grant.sh`. There are no network calls. |
 | [`sleepless.sudoers.template`](../sleepless.sudoers.template) / [`grant.sh`](../grant.sh) | The bundled template is the only executable source of the grant. It permits exactly two fully-specified commands, no wildcards, installed `root:wheel 0440`; the username is validated before interpolation. |
 | [`build.sh`](../build.sh) | `swiftc` + a hand-assembled, ad-hoc-signed bundle. It copies the grant template beside `grant.sh`; no downloaded blobs are baked into the binary. |
 | [`uninstall.sh`](../uninstall.sh) | Removes the app, the login item, and the sudoers drop-in, then proves `sudo -n pmset …` prompts again. |
@@ -66,7 +66,8 @@ cd Sleepless && git checkout v<version>
 
 # Rebuild the executable with the release's deployment target.
 swiftc -O -parse-as-library -target arm64-apple-macos13.0 \
-  -framework AppKit -framework ServiceManagement App.swift -o /tmp/Sleepless-rebuilt
+  -framework AppKit -framework CoreGraphics -framework ServiceManagement \
+  App.swift -o /tmp/Sleepless-rebuilt
 
 # Unzip the release and compare the Mach-O inside the bundle.
 ditto -x -k Sleepless-<version>.zip /tmp/rel

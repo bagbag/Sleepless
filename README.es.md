@@ -66,6 +66,7 @@ Luego haz clic en la taza de la barra de menús, activa el interruptor y cierra 
 | 🔋 | **Nivel mínimo de batería** | Apagado automático al 5–50 % con batería (15 % por defecto). |
 | 🪫 | **Low Power Mode** | Se hace a un lado cuando LPM está activado, con batería. |
 | 🖥️ | **Sin adaptador** | Tapa cerrada, con batería. Sin monitor, sin enchufe HDMI. |
+| 🌑 | **Ahorro de pantalla** | Mantiene oscuro el panel integrado cerrado y, opcionalmente, duerme también las pantallas externas. |
 | 🚀 | **Iniciar al iniciar sesión** | Opcional, desactivado por defecto; nunca activa por sí solo el modo despierto al arrancar. |
 | 🪶 | **Diminuto y nativo** | Un archivo de AppKit. Sin icono en el Dock, daemon ni kext. |
 
@@ -96,7 +97,7 @@ Luego haz clic en la taza de la barra de menús, activa el interruptor y cierra 
 
 ## Cómo funciona
 
-Sleepless activa `pmset disablesleep` (el indicador `SleepDisabled` del kernel), vuelve a leerlo y, mientras se ejecuta, lo revierte en tu nivel mínimo, en Low Power Mode, cuando termina el temporizador o al salir normalmente. El ajuste es global tanto con corriente como con batería; «con batería y sin pantalla» describe lo que permite, no una condición que compruebe la app. Un reinicio también lo restablece. Una app gráfica no puede escribir una contraseña, así que el instalador añade una regla de sudoers de alcance reducido para **exactamente dos comandos**:
+Sleepless activa `pmset disablesleep` (el indicador `SleepDisabled` del kernel), vuelve a leerlo y, mientras se ejecuta, lo revierte en tu nivel mínimo, en Low Power Mode, cuando termina el temporizador o al salir normalmente. Al cerrar la tapa, guarda el brillo físico del panel integrado, lo pone a cero y solicita la suspensión real si no hay una pantalla externa. Con una externa, la deja encendida por defecto; **Dormir también las pantallas externas** permite dormirlas todas. No se supervisan el teclado ni el puntero. La operación de brillo usa dos funciones no documentadas de Apple y falla sin tocar las pantallas externas si dejan de estar disponibles. El ajuste de reposo es global tanto con corriente como con batería; «con batería y sin pantalla» describe lo que permite, no una condición que compruebe la app. Un reinicio también lo restablece. Una app gráfica no puede escribir una contraseña, así que el instalador añade una regla de sudoers de alcance reducido para **exactamente dos comandos**:
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1

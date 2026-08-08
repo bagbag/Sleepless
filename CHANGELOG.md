@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added CI regression checks for the privilege and release-provenance invariants above.
+- Added event-driven lid-close display saving. With no external display online, Sleepless
+  requests real display sleep using unprivileged `pmset displaysleepnow`; with an external
+  display, it blanks only the built-in panel by default. A persisted, default-off switch can
+  sleep external displays too. The saved built-in brightness is restored on lid-open,
+  turn-off, graceful Quit, or the next launch after an interrupted run; no keyboard or
+  pointer monitoring is required.
 
 ## [1.2.7] - 2026-06-03
 

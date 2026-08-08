@@ -66,6 +66,7 @@ Cliquez ensuite sur la tasse dans la barre des menus, basculez l'interrupteur et
 | 🔋 | **Plancher de batterie** | Extinction automatique entre 5 et 50 % sur batterie (15 % par défaut). |
 | 🪫 | **Mode Économie d'énergie** | S'efface quand le mode Économie d'énergie est actif, sur batterie. |
 | 🖥️ | **Sans dongle** | Capot fermé, sur batterie. Sans moniteur, sans fiche HDMI. |
+| 🌑 | **Économie d'écran** | Garde l'écran intégré fermé dans le noir et peut aussi mettre les écrans externes en veille. |
 | 🚀 | **Lancer à l'ouverture de session** | Optionnel, désactivé par défaut ; n'active jamais seul le maintien éveillé au démarrage. |
 | 🪶 | **Minuscule et native** | Un seul fichier AppKit. Sans icône dans le Dock, démon ni kext. |
 
@@ -96,7 +97,7 @@ Cliquez ensuite sur la tasse dans la barre des menus, basculez l'interrupteur et
 
 ## Comment ça marche
 
-Sleepless bascule `pmset disablesleep` (le drapeau `SleepDisabled` du noyau), le relit et, tant qu'il fonctionne, le rétablit au plancher de batterie, en mode Économie d'énergie, à la fin de la minuterie ou lors d'une fermeture normale. Le réglage est global sur secteur comme sur batterie ; « sur batterie et sans écran » décrit ce qu'il permet, pas une condition vérifiée par l'application. Un redémarrage le réinitialise aussi. Une application graphique ne peut pas saisir de mot de passe, alors l'installateur ajoute une règle sudoers au périmètre strict pour **exactement deux commandes** :
+Sleepless bascule `pmset disablesleep` (le drapeau `SleepDisabled` du noyau), le relit et, tant qu'il fonctionne, le rétablit au plancher de batterie, en mode Économie d'énergie, à la fin de la minuterie ou lors d'une fermeture normale. À la fermeture du capot, il sauvegarde la luminosité matérielle de l'écran intégré, la met à zéro, puis met réellement l'écran en veille si aucun écran externe n'est présent. Avec un écran externe, celui-ci reste éveillé par défaut ; **Mettre aussi les écrans externes en veille** permet de tous les endormir. Aucun événement clavier ou pointeur n'est surveillé. L'opération de luminosité utilise deux fonctions Apple non documentées et échoue sans toucher aux écrans externes si elles sont indisponibles. Le réglage de veille est global sur secteur comme sur batterie ; « sur batterie et sans écran » décrit ce qu'il permet, pas une condition vérifiée par l'application. Un redémarrage le réinitialise aussi. Une application graphique ne peut pas saisir de mot de passe, alors l'installateur ajoute une règle sudoers au périmètre strict pour **exactement deux commandes** :
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1

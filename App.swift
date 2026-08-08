@@ -21,7 +21,7 @@
 // FULL cup means it is being kept awake (caffeinated), and a full cup with a small
 // dot means it is awake on battery with the auto-off safety net live.
 //
-// Three small, fail-safe features layer on top, none of which adds a daemon or
+// Four small, fail-safe features layer on top, none of which adds a daemon or
 // persists OS state (so "reboot resets it" still holds):
 //   1. Auto-off timer (1h / 2h) — a one-shot in-memory Timer that flips sleep back
 //      on when it fires. Dies on quit; nothing survives a reboot.
@@ -30,14 +30,22 @@
 //      re-enable disablesleep on its own.
 //   3. Low-Power-Mode auto-off — on battery, if Low Power Mode is on, Sleepless
 //      turns itself off. Same shape as the battery floor, evaluated on the same tick.
+//   4. Lid-close display saving — listens for Apple's clamshell notification. With no
+//      external display it requests real display sleep through unprivileged pmset; with
+//      an external display it sets only the built-in panel's hardware brightness to zero
+//      and restores the previous value when the lid opens. A persisted, default-off switch
+//      can request display sleep for connected external displays too.
 //
 // Build (mirrors Nexus.app): Command Line Tools `swiftc`, NO Xcode project.
 //   swiftc -O -parse-as-library -target arm64-apple-macos26.0 -framework AppKit \
-//          -framework ServiceManagement
+//          -framework CoreGraphics -framework ServiceManagement
 //   File MUST be named App.swift and compiled -parse-as-library so the
 //   @main enum + @MainActor static main() entry is Swift-6 isolation-safe.
 import AppKit
+import CoreFoundation
+import CoreGraphics
 import ServiceManagement
+import notify
 
 // MARK: - Tunables
 private let pollInterval: TimeInterval = 60
@@ -46,6 +54,46 @@ private let floorKey = "batteryFloorPercent"
 private let floorDefault = 15
 private let floorMin = 5
 private let floorMax = 50
+private let savedBuiltInBrightnessKey = "savedBuiltInBrightnessBeforeLidClose"
+private let sleepAllDisplaysOnLidCloseKey = "sleepAllDisplaysOnLidClose"
+private let clamshellNotificationName = "com.apple.system.powermanagement.clamshellstate"
+
+// Apple does not publish an Apple-Silicon-capable API for setting the built-in panel's
+// hardware brightness. Resolve the two narrow DisplayServices symbols at runtime from
+// Apple's fixed system-framework path, keeping the unsupported dependency isolated and
+// allowing the feature to fail softly if a future macOS removes it.
+private final class BuiltInDisplayBrightness {
+    private typealias GetBrightness = @convention(c) (CGDirectDisplayID, UnsafeMutablePointer<Float>) -> Int32
+    private typealias SetBrightness = @convention(c) (CGDirectDisplayID, Float) -> Int32
+
+    private let bundle: CFBundle
+    private let getBrightness: GetBrightness
+    private let setBrightness: SetBrightness
+
+    init?() {
+        let path = "/System/Library/PrivateFrameworks/DisplayServices.framework"
+        guard let bundle = CFBundleCreate(kCFAllocatorDefault, URL(fileURLWithPath: path) as CFURL),
+              CFBundleLoadExecutable(bundle),
+              let getSymbol = CFBundleGetFunctionPointerForName(bundle, "DisplayServicesGetBrightness" as CFString),
+              let setSymbol = CFBundleGetFunctionPointerForName(bundle, "DisplayServicesSetBrightness" as CFString) else {
+            return nil
+        }
+        self.bundle = bundle
+        getBrightness = unsafeBitCast(getSymbol, to: GetBrightness.self)
+        setBrightness = unsafeBitCast(setSymbol, to: SetBrightness.self)
+    }
+
+    func read(displayID: CGDirectDisplayID) -> Float? {
+        var value: Float = 0
+        guard getBrightness(displayID, &value) == 0, value.isFinite else { return nil }
+        return min(max(value, 0), 1)
+    }
+
+    func write(_ value: Float, displayID: CGDirectDisplayID) -> Bool {
+        guard value.isFinite else { return false }
+        return setBrightness(displayID, min(max(value, 0), 1)) == 0
+    }
+}
 
 // MARK: - Menu-bar coffee glyph (native SF Symbols, MONOCHROME template — state by SHAPE)
 // macOS convention: a menu-bar extra is a template image (no colour) so it adapts to light/dark
@@ -175,10 +223,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var autoOffControl: NSSegmentedControl!
     private var countdownLabel: NSTextField!
     private var loginSwitch: NSSwitch!
+    private var sleepAllDisplaysSwitch: NSSwitch!
     private var clickMonitor: Any?
     private var batteryFloorPercent = floorDefault
     private var isOn = false
     private var userForcedOn = false   // user deliberately turned it on; honor over the Low Power Mode auto-off (the hard battery floor still wins)
+    private var sleepAllDisplaysOnLidClose = false
+
+    // Lid-close display saving. The built-in ID is cached while the lid is open because
+    // CoreGraphics may stop reporting any display as built-in after the clamshell closes.
+    private let builtInBrightness = BuiltInDisplayBrightness()
+    private var lastKnownBuiltInDisplayID: CGDirectDisplayID?
+    private var clamshellNotifyToken: Int32 = 0
+    private var isClamshellClosed = false
+    private var closedLidDisplayPolicyApplied = false
+    private var brightnessRestoreTimer: Timer?
+    private var brightnessRestoreAttempts = 0
 
     // Auto-off timer (in-memory; dies on quit, never survives a reboot)
     private var autoOffMinutes = 0           // 0 = none (stay on until off), 60, or 120
@@ -187,11 +247,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var timerEndDate: Date?
 
     private let popoverWidth: CGFloat = 320
-    private let popoverHeight: CGFloat = 432
+    private let popoverHeight: CGFloat = 464
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         batteryFloorPercent = min(max((UserDefaults.standard.object(forKey: floorKey) as? Int) ?? floorDefault, floorMin), floorMax)
+        sleepAllDisplaysOnLidClose = UserDefaults.standard.bool(forKey: sleepAllDisplaysOnLidCloseKey)
+        refreshBuiltInDisplayID()
+        startClamshellObserver()
+        if !isClamshellClosed { beginBuiltInBrightnessRestore() }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
             button.image = offGlyph
@@ -247,7 +311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let swH = swProto.height > 0 ? swProto.height : 21
 
         // GROUP 1 — main switch + state caption
-        let g1y: CGFloat = 46, g1h: CGFloat = 84
+        let g1y: CGFloat = 46, g1h: CGFloat = 116
         let g1 = makeCard(NSRect(x: pad, y: g1y, width: contentW, height: g1h))
         mainCard = g1
         let rowLabel = makeLabel("Keep awake with lid closed", font: .systemFont(ofSize: 13), color: .labelColor)
@@ -265,6 +329,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captionLabel.maximumNumberOfLines = 2
         captionLabel.cell?.wraps = true
         g1.addSubview(captionLabel)
+        let sleepAllLabel = makeLabel("Sleep external displays too", font: .systemFont(ofSize: 13), color: .labelColor)
+        sleepAllLabel.frame = NSRect(x: ci, y: ci + 68, width: cw - swW - 8, height: 22)
+        g1.addSubview(sleepAllLabel)
+        sleepAllDisplaysSwitch = NSSwitch()
+        sleepAllDisplaysSwitch.target = self
+        sleepAllDisplaysSwitch.action = #selector(sleepAllDisplaysToggled(_:))
+        sleepAllDisplaysSwitch.state = sleepAllDisplaysOnLidClose ? .on : .off
+        sleepAllDisplaysSwitch.frame = NSRect(x: contentW - ci - swW, y: ci + 68 + (22 - swH) / 2,
+                                              width: swW, height: swH)
+        g1.addSubview(sleepAllDisplaysSwitch)
 
         // GROUP 2 — auto-off timer (label + segmented [Off | 1h | 2h] + countdown)
         let g2y = g1y + g1h + 12, g2h: CGFloat = 78
@@ -377,6 +451,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func switchToggled(_ sender: NSSwitch) {
         if performToggle(wantOn: sender.state == .on) {
             sender.state = isOn ? .on : .off
+        }
+    }
+
+    @objc private func sleepAllDisplaysToggled(_ sender: NSSwitch) {
+        sleepAllDisplaysOnLidClose = sender.state == .on
+        UserDefaults.standard.set(sleepAllDisplaysOnLidClose, forKey: sleepAllDisplaysOnLidCloseKey)
+        if isOn, isClamshellClosed {
+            closedLidDisplayPolicyApplied = false
+            applyClosedLidDisplayPolicyIfNeeded()
         }
     }
 
@@ -561,16 +644,227 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func loginItemEnabled() -> Bool { SMAppService.mainApp.status == .enabled }
 
+    // MARK: - Lid-close display power saving
+    private enum ExternalDisplayState: Equatable { case absent, present, unknown }
+    private enum BuiltInDisplayPreparation: Equatable { case applied, unavailable, failed }
+
+    private func startClamshellObserver() {
+        var token: Int32 = 0
+        let status = clamshellNotificationName.withCString { name in
+            notify_register_dispatch(name, &token, DispatchQueue.main) { [weak self] token in
+                var state: UInt64 = 0
+                guard notify_get_state(token, &state) == NOTIFY_STATUS_OK else {
+                    NSLog("Sleepless: couldn't read clamshell notification state")
+                    return
+                }
+                MainActor.assumeIsolated {
+                    self?.clamshellStateChanged(closed: state != 0)
+                }
+            }
+        }
+        guard status == NOTIFY_STATUS_OK else {
+            NSLog("Sleepless: couldn't register for clamshell notifications (status %d)", status)
+            return
+        }
+        clamshellNotifyToken = token
+        var state: UInt64 = 0
+        if notify_get_state(token, &state) == NOTIFY_STATUS_OK {
+            isClamshellClosed = state != 0
+        }
+    }
+
+    private func clamshellStateChanged(closed: Bool) {
+        guard closed != isClamshellClosed else { return }
+        isClamshellClosed = closed
+        closedLidDisplayPolicyApplied = false
+        if closed {
+            brightnessRestoreTimer?.invalidate()
+            brightnessRestoreTimer = nil
+            applyClosedLidDisplayPolicyIfNeeded()
+        } else {
+            beginBuiltInBrightnessRestore()
+        }
+    }
+
+    private func applyClosedLidDisplayPolicyIfNeeded() {
+        guard isOn, isClamshellClosed, !closedLidDisplayPolicyApplied else { return }
+        let externalState = externalDisplayState()
+        guard externalState != .unknown else {
+            // Never risk sleeping an external display when display enumeration failed.
+            NSLog("Sleepless: couldn't enumerate displays; skipping lid-close display saving")
+            return
+        }
+
+        // Do this before asking displays to sleep: the private brightness service may no
+        // longer accept the built-in ID once WindowServer has powered the display down.
+        // Keeping brightness at zero means later input can wake an external monitor without
+        // relighting the inaccessible panel behind the closed lid.
+        let builtInPreparation = prepareBuiltInDisplayForClosedLid()
+        let shouldSleepAll = externalState == .absent || sleepAllDisplaysOnLidClose
+        if shouldSleepAll {
+            let result = runCommand("/usr/bin/pmset", ["displaysleepnow"])
+            if result.exit == 0 {
+                closedLidDisplayPolicyApplied = true
+            } else {
+                let detail = result.err.trimmingCharacters(in: .whitespacesAndNewlines)
+                NSLog("Sleepless: display sleep request failed: %@", detail.isEmpty ? "exit \(result.exit)" : detail)
+            }
+        } else {
+            // With an external display kept awake, dimming the built-in panel is the entire
+            // policy. Unavailable private APIs fail softly and are not retried every minute.
+            closedLidDisplayPolicyApplied = builtInPreparation != .failed
+        }
+    }
+
+    private func prepareBuiltInDisplayForClosedLid() -> BuiltInDisplayPreparation {
+        guard let displayID = lastKnownBuiltInDisplayID else {
+            NSLog("Sleepless: no cached built-in display ID; leaving external displays untouched")
+            return .unavailable
+        }
+        guard let builtInBrightness else {
+            NSLog("Sleepless: Apple's built-in brightness service is unavailable")
+            return .unavailable
+        }
+        return saveAndDimBuiltInDisplay(displayID: displayID, controller: builtInBrightness)
+            ? .applied
+            : .failed
+    }
+
+    private func saveAndDimBuiltInDisplay(displayID: CGDirectDisplayID,
+                                          controller: BuiltInDisplayBrightness) -> Bool {
+        if savedBuiltInBrightness() == nil {
+            guard let current = controller.read(displayID: displayID) else {
+                NSLog("Sleepless: couldn't read built-in display brightness")
+                return false
+            }
+            // Zero was already the user's setting, so there is nothing for us to restore.
+            guard current > 0 else { return true }
+            // Flush recovery state before changing hardware state so even a hard crash after
+            // this point can be repaired by a later launch.
+            guard persistSavedBuiltInBrightness(current) else {
+                NSLog("Sleepless: couldn't persist built-in brightness recovery state")
+                return false
+            }
+        }
+        guard controller.write(0, displayID: displayID) else {
+            // Keep the marker: the private call may have partially applied before reporting
+            // failure, and losing the known-good user value would defeat crash recovery.
+            NSLog("Sleepless: couldn't set built-in display brightness to zero")
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
+    private func restoreSavedBuiltInBrightness() -> Bool {
+        guard let saved = savedBuiltInBrightness() else { return true }
+        guard let controller = builtInBrightness,
+              let displayID = currentBuiltInDisplayID() ?? lastKnownBuiltInDisplayID,
+              controller.write(saved, displayID: displayID) else {
+            return false
+        }
+        return clearSavedBuiltInBrightness()
+    }
+
+    private func savedBuiltInBrightness() -> Float? {
+        guard let value = CFPreferencesCopyAppValue(savedBuiltInBrightnessKey as CFString,
+                                                    kCFPreferencesCurrentApplication) as? NSNumber else {
+            return nil
+        }
+        let brightness = value.floatValue
+        guard brightness.isFinite, brightness >= 0, brightness <= 1 else {
+            NSLog("Sleepless: ignoring invalid saved built-in brightness")
+            _ = clearSavedBuiltInBrightness()
+            return nil
+        }
+        return brightness
+    }
+
+    private func persistSavedBuiltInBrightness(_ value: Float) -> Bool {
+        CFPreferencesSetAppValue(savedBuiltInBrightnessKey as CFString, NSNumber(value: value),
+                                 kCFPreferencesCurrentApplication)
+        return CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
+    }
+
+    private func clearSavedBuiltInBrightness() -> Bool {
+        CFPreferencesSetAppValue(savedBuiltInBrightnessKey as CFString, nil,
+                                 kCFPreferencesCurrentApplication)
+        return CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
+    }
+
+    private func beginBuiltInBrightnessRestore() {
+        brightnessRestoreTimer?.invalidate()
+        brightnessRestoreTimer = nil
+        brightnessRestoreAttempts = 0
+        retryBuiltInBrightnessRestore()
+    }
+
+    @objc private func retryBuiltInBrightnessRestore() {
+        refreshBuiltInDisplayID()
+        if restoreSavedBuiltInBrightness() {
+            brightnessRestoreTimer?.invalidate()
+            brightnessRestoreTimer = nil
+            return
+        }
+        brightnessRestoreAttempts += 1
+        guard brightnessRestoreAttempts < 5, !isClamshellClosed else {
+            NSLog("Sleepless: couldn't restore built-in brightness after %d attempts", brightnessRestoreAttempts)
+            brightnessRestoreTimer = nil
+            return
+        }
+        // CoreGraphics can briefly lag the physical lid-open event while rebuilding the
+        // display configuration. Retry rather than making that race visible to the user.
+        brightnessRestoreTimer = Timer.scheduledTimer(timeInterval: 1, target: self,
+                                                       selector: #selector(retryBuiltInBrightnessRestore),
+                                                       userInfo: nil, repeats: false)
+    }
+
+    private func refreshBuiltInDisplayID() {
+        if let displayID = currentBuiltInDisplayID() {
+            lastKnownBuiltInDisplayID = displayID
+        }
+    }
+
+    private func currentBuiltInDisplayID() -> CGDirectDisplayID? {
+        onlineDisplayIDs()?.first(where: { CGDisplayIsBuiltin($0) != 0 })
+    }
+
+    private func externalDisplayState() -> ExternalDisplayState {
+        guard let displays = onlineDisplayIDs() else { return .unknown }
+        return displays.contains(where: { CGDisplayIsBuiltin($0) == 0 }) ? .present : .absent
+    }
+
+    private func onlineDisplayIDs() -> [CGDirectDisplayID]? {
+        // One snapshot avoids a count-then-fill race where an external display attached
+        // between two calls could be omitted and then accidentally slept. The practical
+        // macOS limit is far below this conservative capacity.
+        let capacity: CGDisplayCount = 64
+        var displays = [CGDirectDisplayID](repeating: 0, count: Int(capacity))
+        var count: CGDisplayCount = 0
+        guard CGGetOnlineDisplayList(capacity, &displays, &count) == .success else { return nil }
+        return Array(displays.prefix(Int(count)))
+    }
+
     // MARK: - Core state sync
     @objc private func refresh() {
         let on = readSleepDisabled()
         applyUI(on: on)
-        if on { enforceSafetyNets() }
+        if on {
+            enforceSafetyNets()
+            applyClosedLidDisplayPolicyIfNeeded()
+        }
     }
 
     private func applyUI(on: Bool) {
+        let wasOn = isOn
         isOn = on
-        if !on { cancelKeepAwakeTimer() }   // going OFF clears any countdown/timer
+        if !on {
+            cancelKeepAwakeTimer()   // going OFF clears any countdown/timer
+            closedLidDisplayPolicyApplied = false
+            if wasOn, !restoreSavedBuiltInBrightness() {
+                NSLog("Sleepless: couldn't restore built-in brightness after turning off")
+            }
+        }
         // ARMED = kept awake while actively discharging on battery, so the
         // auto-off safety net is live. Distinct menu-bar glyph (cup + dot).
         var armed = false
@@ -661,29 +955,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // runCapture discards). stdin is /dev/null so a GUI process with no controlling TTY can
     // never block on a prompt. This is what lets the app KNOW whether its own toggle worked.
     private func runPrivileged(_ args: [String]) -> (exit: Int32, out: String, err: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-        process.arguments = args
-        var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"
-        env["HOME"] = FileManager.default.homeDirectoryForCurrentUser.path
-        env["LC_ALL"] = "C"
-        process.environment = env
-        let outPipe = Pipe(), errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = errPipe
-        process.standardInput = FileHandle.nullDevice
-        do { try process.run() }
-        catch {
-            NSLog("Sleepless: failed to launch sudo: %@", error.localizedDescription)
-            return (-1, "", "launch failed: \(error.localizedDescription)")
-        }
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus,
-                String(data: outData, encoding: .utf8) ?? "",
-                String(data: errData, encoding: .utf8) ?? "")
+        runCommand("/usr/bin/sudo", args)
     }
 
     // MARK: - Battery + Low-Power-Mode safety nets (silent; no extra UI) — Feature 3
@@ -753,9 +1025,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = runCapture("/usr/bin/osascript", ["-e", script])
     }
 
-    // MARK: - Process runner (explicit PATH/HOME; captures stdout)
-    @discardableResult
-    private func runCapture(_ launchPath: String, _ args: [String]) -> String {
+    // MARK: - Process runner (explicit PATH/HOME; captures output and real status)
+    private func runCommand(_ launchPath: String, _ args: [String]) -> (exit: Int32, out: String, err: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: launchPath)
         process.arguments = args
@@ -764,14 +1035,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         env["HOME"] = FileManager.default.homeDirectoryForCurrentUser.path
         env["LC_ALL"] = "C"
         process.environment = env
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
+        let outPipe = Pipe(), errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+        process.standardInput = FileHandle.nullDevice
         do { try process.run() }
-        catch { NSLog("Sleepless: failed to launch %@: %@", launchPath, error.localizedDescription); return "" }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        catch {
+            NSLog("Sleepless: failed to launch %@: %@", launchPath, error.localizedDescription)
+            return (-1, "", "launch failed: \(error.localizedDescription)")
+        }
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
+        return (process.terminationStatus,
+                String(data: outData, encoding: .utf8) ?? "",
+                String(data: errData, encoding: .utf8) ?? "")
+    }
+
+    @discardableResult
+    private func runCapture(_ launchPath: String, _ args: [String]) -> String {
+        runCommand(launchPath, args).out
     }
 
     // Every graceful termination path (popover Quit, Cmd-Q, logout) attempts to restore
@@ -779,6 +1062,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         _ = turnOffForSafety(successMessage: nil,
                              failureMessage: "Sleepless couldn't restore normal sleep before quitting. Reboot or run pmset disablesleep 0.")
+        if !restoreSavedBuiltInBrightness() {
+            NSLog("Sleepless: couldn't restore built-in brightness before quitting")
+        }
+        if clamshellNotifyToken != 0 {
+            notify_cancel(clamshellNotifyToken)
+            clamshellNotifyToken = 0
+        }
+        brightnessRestoreTimer?.invalidate()
+        brightnessRestoreTimer = nil
         return .terminateNow
     }
 

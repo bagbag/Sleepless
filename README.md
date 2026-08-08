@@ -66,6 +66,7 @@ Then click the cup in the menu bar, flip the switch, and close the lid.
 | 🔋 | **Battery floor** | Auto-off at 5–50% on battery (default 15%). |
 | 🪫 | **Low Power Mode** | Steps aside when LPM is on, on battery. |
 | 🖥️ | **No dongle** | Lid closed, on battery. No monitor, no HDMI plug. |
+| 🌑 | **Display power saving** | Keeps the closed built-in panel dark; optionally sleeps connected external displays too. |
 | 🚀 | **Launch at login** | Optional, off by default, never enables keep-awake on launch. |
 | 🪶 | **Tiny + native** | One AppKit file. No Dock icon, daemon, or kext. |
 
@@ -96,7 +97,9 @@ Then click the cup in the menu bar, flip the switch, and close the lid.
 
 ## How it works
 
-Sleepless toggles `pmset disablesleep` (the kernel's `SleepDisabled` flag), reads it back so the menu bar never lies, and, while running, reverts it at your battery floor, in Low Power Mode, when the timer ends, or during graceful Quit. The setting is global across AC and battery power; “on battery, without a display” describes what it enables, not a condition the app checks. A reboot also resets it. A GUI app can't type a password, so the installer adds a scoped sudoers rule for **exactly two commands**:
+Sleepless toggles `pmset disablesleep` (the kernel's `SleepDisabled` flag), reads it back so the menu bar never lies, and, while running, reverts it at your battery floor, in Low Power Mode, when the timer ends, or during graceful Quit. When the lid closes, it first saves the built-in panel's hardware brightness and sets it to zero, then requests real display sleep if no external display is online. This keeps the closed panel dark even if keyboard or pointer input later wakes a display. With an external display connected, the default is to leave it awake; the **Sleep external displays too** switch instead requests sleep for every display. The Apple-Silicon brightness operation uses two narrowly isolated, undocumented Apple `DisplayServices` functions and fails without touching external displays if they become unavailable.
+
+The keep-awake setting is global across AC and battery power; “on battery, without a display” describes what it enables, not a condition checked before enabling it. A reboot also resets it. A GUI app can't type a password, so the installer adds a scoped sudoers rule for **exactly two commands**:
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
@@ -104,6 +107,7 @@ Sleepless toggles `pmset disablesleep` (the kernel's `SleepDisabled` flag), read
 
 - **Can't be widened.** sudoers matches arguments literally, no wildcards.
 - **Nothing passwordless to hijack.** No daemon or helper script is named by sudoers; normal toggles call `/usr/bin/pmset` directly with an argv array. The setup shell script runs only after explicit authentication.
+- **Display saving is unprivileged.** `pmset displaysleepnow` runs as the user. Sleepless does not monitor keyboard or pointer input; built-in brightness is set to zero proactively, with recovery recorded before dimming and restored on lid-open, turning Sleepless off, graceful Quit, or the next launch after an interrupted run.
 - **Always reversible.** Reboot, the floor, the timer, or `./uninstall.sh` (which proves the grant is gone).
 
 Verify a download, no Apple account needed:

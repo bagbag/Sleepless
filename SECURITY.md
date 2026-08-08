@@ -75,6 +75,30 @@ Launch at login uses Apple's `SMAppService.mainApp` exclusively. The source inst
 longer creates a parallel `~/Library/LaunchAgents` job and removes that obsolete job when
 upgrading an installation that used it.
 
+## Lid-close display saving
+
+Display saving does not widen the sudoers grant. When no external display is online,
+Sleepless runs Apple's `/usr/bin/pmset displaysleepnow` directly as the logged-in user. When
+an external display is online, that command would blank every display, so Sleepless leaves
+it alone by default and targets only the cached built-in display instead. The persisted
+**Sleep external displays too** switch is off by default and explicitly opts into the
+all-display command.
+
+Apple does not provide a documented Apple-Silicon API for changing built-in hardware
+brightness. Sleepless therefore resolves only `DisplayServicesGetBrightness` and
+`DisplayServicesSetBrightness` at runtime from Apple's fixed
+`/System/Library/PrivateFrameworks/DisplayServices.framework` path. It does not search a
+user-controlled path or link another binary. If either symbol is unavailable, the operation
+fails closed and no external display is changed.
+
+Before setting brightness to zero, Sleepless records the previous value in its preferences.
+It removes that recovery value only after restoration on lid-open, turning Sleepless off,
+graceful Quit, or a later launch. A hard crash can delay restoration until that later launch;
+the normal brightness-up key remains the manual recovery path. Brightness zero saves the
+backlight but is not the same reduced-power state as real display sleep. Sleepless sets it
+proactively before requesting display sleep and does not capture or monitor keyboard or
+pointer events.
+
 ## Honest residual risk
 
 The grant is passwordless **by design**: any process already running as your user can flip
@@ -156,6 +180,9 @@ for a password again. The single file to audit or delete by hand is
 ## Primary sources
 
 - Apple `pmset(1)` man page (no `disablesleep`): https://keith.github.io/xcode-man-pages/pmset.1.html
+- Apple open-source `pmset` (`displaysleepnow` implementation): https://github.com/apple-oss-distributions/PowerManagement/blob/d415e45501842834a280930c3eed9186544a67f0/pmset/pmset.m
+- Apple open-source clamshell notification and display handling: https://github.com/apple-oss-distributions/PowerManagement/blob/d415e45501842834a280930c3eed9186544a67f0/pmconfigd/PMDisplay.m
+- `brightness` compatibility notes and isolated Apple-Silicon fallback: https://github.com/nriley/brightness
 - sudoers manual (exact-arg match, includedir filename rules): https://www.sudo.ws/docs/man/1.9.0/sudoers.man/
 - Passwordless sudo for programs (scope / root-own / revoke): https://jozefcipa.com/blog/how-to-use-sudo-without-a-password-in-your-programs/
 - Apple — Safely open apps / Open Anyway flow: https://support.apple.com/en-us/102445

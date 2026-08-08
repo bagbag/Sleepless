@@ -66,6 +66,7 @@ Klicke dann auf die Tasse in der Menüleiste, lege den Schalter um und schließe
 | 🔋 | **Akku-Mindeststand** | Auto-Abschaltung bei 5–50 % im Akkubetrieb (Standard 15 %). |
 | 🪫 | **Low Power Mode** | Tritt zur Seite, wenn LPM im Akkubetrieb aktiv ist. |
 | 🖥️ | **Kein Dongle** | Deckel geschlossen, im Akkubetrieb. Kein Monitor, kein HDMI-Stecker. |
+| 🌑 | **Display-Energiesparen** | Hält das geschlossene interne Panel dunkel und kann optional auch externe Displays schlafen legen. |
 | 🚀 | **Beim Anmelden starten** | Optional, standardmäßig aus; aktiviert beim Start niemals selbst den Wachmodus. |
 | 🪶 | **Winzig und nativ** | Eine AppKit-Datei. Kein Dock-Symbol, kein Daemon, keine kext. |
 
@@ -96,7 +97,7 @@ Klicke dann auf die Tasse in der Menüleiste, lege den Schalter um und schließe
 
 ## So funktioniert es
 
-Sleepless schaltet `pmset disablesleep` um (das `SleepDisabled`-Flag des Kernels), liest es zurück und setzt es, solange die App läuft, bei deinem Akku-Mindeststand, im Low Power Mode, beim Ablaufen des Timers oder beim normalen Beenden zurück. Die Einstellung gilt global im Netz- und Akkubetrieb; „im Akkubetrieb und ohne externen Bildschirm“ beschreibt die Möglichkeit, nicht eine von der App geprüfte Bedingung. Ein Neustart setzt es ebenfalls zurück. Eine GUI-App kann kein Passwort eintippen, deshalb fügt das Installationsprogramm eine eng gefasste sudoers-Regel für **genau zwei Befehle** hinzu:
+Sleepless schaltet `pmset disablesleep` um (das `SleepDisabled`-Flag des Kernels), liest es zurück und setzt es, solange die App läuft, bei deinem Akku-Mindeststand, im Low Power Mode, beim Ablaufen des Timers oder beim normalen Beenden zurück. Beim Schließen des Deckels speichert es die Hardware-Helligkeit des internen Panels, setzt sie auf null und fordert echten Display-Ruhezustand an, wenn kein externer Bildschirm vorhanden ist. Externe Displays bleiben standardmäßig wach; **Externe Displays ebenfalls schlafen lassen** schickt alle in den Ruhezustand. Tastatur- und Zeigerereignisse werden nicht überwacht. Die Helligkeitsfunktion nutzt zwei undokumentierte Apple-Funktionen und verändert bei deren Ausfall keine externen Displays. Die Ruhezustandseinstellung gilt global im Netz- und Akkubetrieb; „im Akkubetrieb und ohne externen Bildschirm“ beschreibt die Möglichkeit, nicht eine von der App geprüfte Bedingung. Ein Neustart setzt es ebenfalls zurück. Eine GUI-App kann kein Passwort eintippen, deshalb fügt das Installationsprogramm eine eng gefasste sudoers-Regel für **genau zwei Befehle** hinzu:
 
 ```
 <you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
